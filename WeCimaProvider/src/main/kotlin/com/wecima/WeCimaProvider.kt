@@ -1,5 +1,7 @@
 package com.wecima
 
+import com.lagradost.cloudstream3.MainPageAPI
+import com.lagradost.cloudstream3.Qualities
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
@@ -58,7 +60,7 @@ class WeCimaProvider : MainPageAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
-        
+
         val title = when {
             document.selectFirst("li:contains(المسلسل) p") != null -> {
                 document.select("li:contains(المسلسل) p").text()
@@ -78,11 +80,9 @@ class WeCimaProvider : MainPageAPI() {
             .map { it.text() }
         val year = document.selectFirst("li:contains(سنة الإنتاج) p")?.text()?.toIntOrNull()
 
-        // Check if it's a series or movie
         val episodes = document.select("div.Episodes--Seasons--Episodes a")
-        
+
         return if (episodes.isNotEmpty() || document.select("div.List--Seasons--Episodes a").isNotEmpty()) {
-            // It's a series
             val episodesList = getEpisodesList(document)
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodesList) {
                 this.posterUrl = poster
@@ -91,7 +91,6 @@ class WeCimaProvider : MainPageAPI() {
                 this.year = year
             }
         } else {
-            // Check for movie series
             val movieSeries = document.select("singlerelated.hasdivider:contains(سلسلة) div.Thumb--GridItem a")
             if (movieSeries.isNotEmpty()) {
                 val episodesList = movieSeries.mapIndexed { index, element ->
@@ -108,7 +107,6 @@ class WeCimaProvider : MainPageAPI() {
                     this.year = year
                 }
             } else {
-                // It's a single movie
                 newMovieLoadResponse(title, url, TvType.Movie, url) {
                     this.posterUrl = poster
                     this.plot = description
@@ -122,14 +120,13 @@ class WeCimaProvider : MainPageAPI() {
     private suspend fun getEpisodesList(document: Document): List<Episode> {
         val episodes = mutableListOf<Episode>()
         val seasonsList = document.select("div.List--Seasons--Episodes a")
-        
+
         if (seasonsList.isEmpty()) {
-            // Single season
             document.select("div.Episodes--Seasons--Episodes a").forEach { element ->
                 val episodeName = "الموسم 1 : ${element.text()}"
                 val episodeUrl = element.absUrl("href")
                 val episodeNumber = element.text().filter { it.isDigit() }.toIntOrNull() ?: 1
-                
+
                 episodes.add(
                     Episode(
                         data = episodeUrl,
@@ -140,21 +137,20 @@ class WeCimaProvider : MainPageAPI() {
                 )
             }
         } else {
-            // Multiple seasons
             seasonsList.reversed().forEachIndexed { seasonIndex, season ->
                 val seasonNumber = season.text().filter { it.isDigit() }.toIntOrNull() ?: (seasonIndex + 1)
-                
+
                 val seasonDocument = if (season.hasClass("selected")) {
                     document
                 } else {
                     app.get(season.absUrl("href")).document
                 }
-                
+
                 seasonDocument.select("div.Episodes--Seasons--Episodes a").forEach { element ->
                     val episodeName = "الموسم $seasonNumber : ${element.text()}"
                     val episodeUrl = element.absUrl("href")
                     val episodeNumber = element.text().filter { it.isDigit() }.toIntOrNull() ?: 1
-                    
+
                     episodes.add(
                         Episode(
                             data = episodeUrl,
@@ -166,7 +162,7 @@ class WeCimaProvider : MainPageAPI() {
                 }
             }
         }
-        
+
         return episodes
     }
 
@@ -177,11 +173,11 @@ class WeCimaProvider : MainPageAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
-        
+
         document.select("ul.WatchServersList li").forEach { server ->
             val serverUrl = server.selectFirst("btn")?.attr("data-url") ?: return@forEach
             val serverName = server.text().lowercase()
-            
+
             when {
                 server.hasClass("MyCimaServer") && "/run/" in serverUrl -> {
                     val mp4Url = serverUrl.replace("?Key", "/?Key") + "&auto=true"
@@ -213,7 +209,7 @@ class WeCimaProvider : MainPageAPI() {
                 }
             }
         }
-        
+
         return true
     }
 }
